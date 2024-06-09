@@ -1,27 +1,28 @@
+const express = require('express');
+const path = require('path');
 const http = require('http');
 const fs = require('fs');
 const WebSocket = require('ws');
 const gameLogic = require('./gameLogic');
 
-const server = http.createServer((req, res) => {
-    if (req.url === '/players' && req.method === 'GET') {
-        // Return joined players and their IDs
-        const players = gameLogic.getJoinedPlayers();
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify(players));
-    } else {
-        // Serve the index.html page
-        fs.readFile('./public/index.html', (err, data) => {
-            if (err) {
-                res.writeHead(404);
-                res.end('File not found');
-            } else {
-                res.writeHead(200, { 'Content-Type': 'text/html' });
-                res.end(data);
-            }
-        });
-    }
+const app = express();
+
+// Serve static files from the "public" directory
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/players', (req, res) => {
+    // Return joined players and their IDs
+    const players = gameLogic.getJoinedPlayers();
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(players));
 });
+
+// Serve the index.html page for all other routes
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+const server = http.createServer(app);
 
 const wss = new WebSocket.Server({ server });
 
@@ -29,7 +30,7 @@ wss.on('connection', (ws) => {
     console.log('Client connected');
 
     ws.on('message', (message) => {
-        //console.log('Received:', message);
+        console.log('Received:', message);
         gameLogic.handleMessage(ws, message);
     });
 
