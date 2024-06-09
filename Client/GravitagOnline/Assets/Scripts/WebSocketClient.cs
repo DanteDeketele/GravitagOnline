@@ -3,7 +3,6 @@ using NativeWebSocket;
 using System;
 using System.Net;
 using System.Text;
-using System.Threading.Tasks;
 
 public class WebSocketClientServer : MonoBehaviour
 {
@@ -107,7 +106,9 @@ public class WebSocketClientServer : MonoBehaviour
 
     void Update()
     {
-        websocket.DispatchMessageQueue();  // Make sure to call this regularly in the Unity main thread
+#if !UNITY_WEBGL || UNITY_EDITOR
+        websocket.DispatchMessageQueue();  // This line should not be called in WebGL builds
+#endif
 
         if (Input.GetKeyDown(KeyCode.Space))
         {
