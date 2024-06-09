@@ -109,13 +109,13 @@ public class WebSocketClientServer : MonoBehaviour
         {
             Send($"join:{playerId}");
         }
-        else if (Input.GetKeyDown(KeyCode.LeftArrow))
+
+        Vector2 input = new Vector2(Input.GetAxis("Horizontal"), Input.GetAxis("Vertical"));
+        input.Normalize();
+
+        if (input != Vector2.zero)
         {
-            Send($"move:{playerId}:left");
-        }
-        else if (Input.GetKeyDown(KeyCode.RightArrow))
-        {
-            Send($"move:{playerId}:right");
+            Send($"move:{playerId}:{input.x}:{input.y}");
         }
     }
 
