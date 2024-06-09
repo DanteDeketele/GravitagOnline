@@ -29,7 +29,7 @@ wss.on('connection', (ws) => {
     console.log('Client connected');
 
     ws.on('message', (message) => {
-        console.log('Received:', message);
+        //console.log('Received:', message);
         gameLogic.handleMessage(ws, message);
     });
 

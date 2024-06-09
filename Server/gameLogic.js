@@ -12,6 +12,14 @@ const handleMessage = (ws, message) => {
             console.log('Player moved:', data.playerId, data.input);
             // Handle player movement
             break;
+        case 'leave':
+            console.log('Player left the game:', data.playerId);
+            // Handle player leaving
+            const index = joinedPlayers.findIndex(player => player.id === data.playerId);
+            if (index !== -1) {
+                joinedPlayers.splice(index, 1);
+            }
+            break;
         // Add more cases for other commands
         default:
             console.log('Unknown command:', data.command);
