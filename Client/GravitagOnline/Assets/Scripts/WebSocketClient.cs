@@ -1,21 +1,19 @@
 using UnityEngine;
 using NativeWebSocket;
 using System;
-using System.Collections;
 using System.Net;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
-using Unity.VisualScripting;
 
 public class WebSocketClientServer : MonoBehaviour
 {
     WebSocket websocket;
-
     string serverUri = "ws://localhost:6969";
+    string playerId;
 
     void Start()
     {
+        playerId = GeneratePlayerId();
         Connect();
     }
 
@@ -25,9 +23,7 @@ public class WebSocketClientServer : MonoBehaviour
 
         websocket.OnOpen += () =>
         {
-            Debug.Log("Connection open!");    
-            string playerId = IPAddress.Any.ToString();
-            playerId = Hash128.Compute(playerId).ToString();
+            Debug.Log("Connection open!");
             Send($"join:{playerId}");
         };
 
@@ -45,38 +41,50 @@ public class WebSocketClientServer : MonoBehaviour
         {
             string message = Encoding.UTF8.GetString(bytes);
             Debug.Log($"Received message: {message}");
-
-            // Deserialize received message
             MessageData data = JsonUtility.FromJson<MessageData>(message);
-
-            // Handle different message types
-            switch (data.command)
-            {
-                case "join":
-                    Debug.Log(data.message);
-                    break;
-                case "move":
-                    Debug.Log(data.message);
-                    break;
-                case "state":
-                    Debug.Log(data.message);
-                    break;
-                default:
-                    Debug.Log("Unknown command");
-                    break;
-            }
+            HandleMessage(data);
         };
 
         await websocket.Connect();
+    }
+
+    string GeneratePlayerId()
+    {
+        string ipAddress = IPAddress.Any.ToString();
+        return Hash128.Compute(ipAddress).ToString();
+    }
+
+    void HandleMessage(MessageData data)
+    {
+        switch (data.command)
+        {
+            case "join":
+                Debug.Log("Player joined the game!");
+                break;
+            case "move":
+                Debug.Log(data.message);
+                break;
+            case "state":
+                Debug.Log(data.message);
+                // Update game state and UI based on the message
+                break;
+            case "error":
+                Debug.Log(data.message);
+                break;
+            case "leave":
+                Debug.Log("Player left the game!");
+                break;
+            default:
+                Debug.Log("Unknown command: " + data.command);
+                break;
+        }
     }
 
     void OnDisable()
     {
         if (websocket != null)
         {
-            string playerId = IPAddress.Any.ToString();
-            playerId = Hash128.Compute(playerId).ToString();
-            Send($"join:{playerId}");
+            Send($"leave:{playerId}");
             websocket.Close();
         }
     }
@@ -95,29 +103,22 @@ public class WebSocketClientServer : MonoBehaviour
 
     void Update()
     {
+        websocket.DispatchMessageQueue();  // Make sure to call this regularly in the Unity main thread
+
         if (Input.GetKeyDown(KeyCode.Space))
         {
-            Send("join:Player1");
+            Send($"join:{playerId}");
         }
         else if (Input.GetKeyDown(KeyCode.LeftArrow))
         {
-            Send("move:Player1:left");
+            Send($"move:{playerId}:left");
         }
         else if (Input.GetKeyDown(KeyCode.RightArrow))
         {
-            Send("move:Player1:right");
+            Send($"move:{playerId}:right");
         }
     }
 
-    private void OnDestroy()
-    {
-        if (websocket != null)
-        {
-            websocket.Close();
-        }
-    }
-
-    // Data structure for deserializing messages
     [Serializable]
     public class MessageData
     {

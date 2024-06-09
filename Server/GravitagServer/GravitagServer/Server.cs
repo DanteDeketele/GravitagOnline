@@ -1,18 +1,20 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
 using System.Net.WebSockets;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace GravitagServer
 {
     internal class Server
     {
         public int PORT { get; }
-
-        private List<Game> games = new List<Game>();
-        private List<string> players = new List<string>();
-
+        private List<Game> _games = new List<Game>();
+        private List<string> _players = new List<string>();
+        private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
 
         public Server(int port)
         {
@@ -22,75 +24,76 @@ namespace GravitagServer
         public async Task RunAsync()
         {
             Console.Title = "Gravitag Server";
-
             PrintServerStartMessage();
             CreateGame();
 
             HttpListener listener = new HttpListener();
             listener.Prefixes.Add($"http://localhost:{PORT}/");
             listener.Start();
-            
 
             Console.WriteLine("Server started. Waiting for connections...");
 
+            // Start the game loop
+            _ = Task.Run(() => GameLoop(_cancellationTokenSource.Token));
+
             while (true)
             {
-                
-
                 HttpListenerContext context = await listener.GetContextAsync();
                 if (context.Request.IsWebSocketRequest)
                 {
-                    await ProcessWebSocketRequest(context);
+                    _ = ProcessWebSocketRequestAsync(context);
                 }
                 else
                 {
-                    Console.WriteLine( context.Request.HttpMethod + " request received. Sending 400 Bad Request...");
+                    Console.WriteLine($"{context.Request.HttpMethod} request received. Sending 400 Bad Request...");
                     context.Response.StatusCode = 400;
                     context.Response.Close();
                 }
-
-                
-
-            }
-
-            foreach (Game game in games)
-            {
-                game.Stop();
             }
         }
 
-        private async Task ProcessWebSocketRequest(HttpListenerContext context)
+        private async Task ProcessWebSocketRequestAsync(HttpListenerContext context)
         {
             HttpListenerWebSocketContext webSocketContext = await context.AcceptWebSocketAsync(null);
             WebSocket socket = webSocketContext.WebSocket;
 
-            while (socket.State == WebSocketState.Open)
+            try
             {
-                var buffer = new byte[1024 * 4]; // Use a larger buffer size
-                var result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
-
-                if (result.MessageType == WebSocketMessageType.Text)
+                while (socket.State == WebSocketState.Open)
                 {
-                    var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                    Console.WriteLine($"Received message: {message}");
+                    var buffer = new byte[1024 * 4];
+                    var result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
 
-                    var response = HandleGameMessage(message);
-
-                    // Send response back to the client
-                    var responseBuffer = Encoding.UTF8.GetBytes(response);
-                    await socket.SendAsync(new ArraySegment<byte>(responseBuffer, 0, responseBuffer.Length), WebSocketMessageType.Text, true, CancellationToken.None);
+                    if (result.MessageType == WebSocketMessageType.Text)
+                    {
+                        var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                        var response = HandleGameMessage(message);
+                        Debug.WriteLine($"Sending response: {response}");
+                        response = "{\"command\":\"" + response + "\"}";
+                        var responseBuffer = Encoding.UTF8.GetBytes(response);
+                        await socket.SendAsync(new ArraySegment<byte>(responseBuffer), WebSocketMessageType.Text, true, CancellationToken.None);
+                    }
+                    else if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
+                    }
                 }
-                else if (result.MessageType == WebSocketMessageType.Close)
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"WebSocket error: {ex.Message}");
+            }
+            finally
+            {
+                if (socket.State != WebSocketState.Closed)
                 {
-                    await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
+                    socket.Abort();
                 }
             }
         }
 
-
         private string HandleGameMessage(string message)
         {
-            // Parse message and apply game logic
             var parts = message.Split(':');
             if (parts.Length < 2) return "Invalid message format";
 
@@ -101,88 +104,107 @@ namespace GravitagServer
             switch (command)
             {
                 case "join":
-                    Game game = games.Find(g => !g.IsFull);
-
+                    var game = _games.Find(g => !g.IsFull);
                     if (game == null)
                     {
                         CreateGame();
-                        game = games[games.Count - 1];
+                        game = _games[^1];
                     }
-
                     game.AddPlayer(player);
+                    return $"join";
 
-                    return $"{player} joined the game {game.Id}";
                 case "move":
                     if (argument != null)
                     {
-                        game = games.Find(g => g.Players.Contains(player));
+                        game = _games.Find(g => g.Players.Contains(player));
                         if (game == null) return "Player is not in a game";
                         game.PlayerMove(player, argument);
+                        if (!_players.Contains(player))
+                            _players.Add(player);
                         return $"{player} made a move: {argument}";
                     }
                     return "Move command requires an argument";
+
                 case "state":
-                    game = games.Find(g => g.Players.Contains(player));
+                    game = _games.Find(g => g.Players.Contains(player));
                     if (game == null) return "Player is not in a game";
                     return game.GetGameState();
+
                 case "leave":
-                    game = games.Find(g => g.Players.Contains(player));
+                    game = _games.Find(g => g.Players.Contains(player));
                     if (game == null) return "Player is not in a game";
                     game.PlayerDelete(player);
-                    return $"{player} left the game {game.Id}";
+                    _players.Remove(player);
+                    return $"leave";
+
                 default:
                     return "Unknown command";
             }
         }
 
+        private async Task GameLoop(CancellationToken token)
+        {
+            const int tickRate = 60; // 60 updates per second
+            var updateInterval = TimeSpan.FromSeconds(1.0 / tickRate);
+            var stopwatch = Stopwatch.StartNew();
+
+            while (!token.IsCancellationRequested)
+            {
+                var startTime = stopwatch.Elapsed;
+
+                // Update game state
+                foreach (var game in _games)
+                {
+                    game.Update();
+                    if (game.IsOver)
+                    {
+                        game.Stop();
+                        _games.Remove(game);
+                    }
+                }
+
+                var elapsed = stopwatch.Elapsed - startTime;
+                var delay = updateInterval - elapsed;
+                if (delay > TimeSpan.Zero)
+                {
+                    await Task.Delay(delay, token);
+                }
+            }
+        }
+
         private void PrintServerStartMessage()
         {
-            string message = "--------------------------------\n";
-            message += "Gravitag Server\n";
-            message += "Created by: [Dante Deketele]\n";
-            message += $".NET version: {Environment.Version}\n";
-            message += $"Started at: {DateTime.Now}\n";
-            message += $"OS Version: {Environment.OSVersion}\n";
-            message += $"Cores #: {Environment.ProcessorCount} cores\n";
-            message += $"Server is running in: {Environment.CurrentDirectory}\n";
-            message += $"Username: {Environment.UserName}\n";
-            message += $"UserDomainName: {Environment.UserDomainName}\n";
-            message += $"Machine: {Environment.MachineName}\n";
-            message += $"Port: {PORT}\n";
-            message += "--------------------------------\n";
+            var message = new StringBuilder();
+            message.AppendLine("--------------------------------");
+            message.AppendLine("Gravitag Server");
+            message.AppendLine("Created by: [Dante Deketele]");
+            message.AppendLine($".NET version: {Environment.Version}");
+            message.AppendLine($"Started at: {DateTime.Now}");
+            message.AppendLine($"OS Version: {Environment.OSVersion}");
+            message.AppendLine($"Cores #: {Environment.ProcessorCount} cores");
+            message.AppendLine($"Server is running in: {Environment.CurrentDirectory}");
+            message.AppendLine($"Username: {Environment.UserName}");
+            message.AppendLine($"UserDomainName: {Environment.UserDomainName}");
+            message.AppendLine($"Machine: {Environment.MachineName}");
+            message.AppendLine($"Port: {PORT}");
+            message.AppendLine("--------------------------------");
 
-            Console.WriteLine(message);
+            Console.WriteLine(message.ToString());
         }
 
         private void CreateGame()
         {
-            int id = games.Count;
-            games.Add(new Game(id));
+            int id = _games.Count;
+            _games.Add(new Game(id));
         }
 
         private void StopGame(int id)
         {
-            Game game = games.Find(g => g.Id == id);
-
+            var game = _games.Find(g => g.Id == id);
             if (game != null)
             {
                 game.Stop();
-                games.Remove(game);
-            }
-        }
-
-        private void UpdateGames()
-        {
-            for (int i = games.Count - 1; i >= 0; i--)
-            {
-                Game game = games[i];
-                game.Update();
-
-                if (game.IsOver)
-                {
-                    game.Stop();
-                    games.RemoveAt(i);
-                }
+                _games.Remove(game);
             }
         }
     }

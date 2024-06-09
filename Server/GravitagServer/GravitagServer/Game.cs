@@ -44,7 +44,8 @@ namespace GravitagServer
         public void AddPlayer(string player)
         {
             Players.Add(player);
-            Console.WriteLine($"{player} joined game {Id}");
+            string Time = DateTime.Now.ToString("HH:mm:ss");
+            Console.WriteLine($"+{Time}: {player} joined game {Id}");
         }
 
         public void PlayerMove(string player, string move)
@@ -54,7 +55,8 @@ namespace GravitagServer
 
         public void PlayerDelete(string player) {
             Players.Remove(player);
-            Console.WriteLine($"{player} left game {Id}");
+            string Time = DateTime.Now.ToString("HH:mm:ss");
+            Console.WriteLine($"-{Time}: {player} left game {Id}");
         }
 
         public string GetGameState()
