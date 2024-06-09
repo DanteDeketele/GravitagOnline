@@ -20,4 +20,8 @@ const handleDisconnect = (ws) => {
     // Handle player disconnection
 };
 
-module.exports = { handleMessage, handleDisconnect };
+const getJoinedPlayers = () => {
+    return joinedPlayers.map(player => ({ id: player.id, name: player.name }));
+};
+
+module.exports = { handleMessage, handleDisconnect, getJoinedPlayers };

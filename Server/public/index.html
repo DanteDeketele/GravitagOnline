@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Joined Players</title>
+</head>
+<body>
+    <h1>Joined Players</h1>
+    <ul id="playersList"></ul>
+    <script>
+        // Fetch joined players from server and display them
+        fetch('/players')
+            .then(response => response.json())
+            .then(players => {
+                const playersList = document.getElementById('playersList');
+                players.forEach(player => {
+                    const listItem = document.createElement('li');
+                    listItem.textContent = `${player.id}: ${player.name}`;
+                    playersList.appendChild(listItem);
+                });
+            });
+    </script>
+</body>
+</html>
