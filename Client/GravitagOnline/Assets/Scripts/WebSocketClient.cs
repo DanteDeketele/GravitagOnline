@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 public class WebSocketClientServer : MonoBehaviour
 {
     WebSocket websocket;
-    string serverUri = "ws://localhost:6969";
+    string serverUri = "ws://deketele.dev:6969";
     string playerId;
 
     void Start()
@@ -24,7 +24,10 @@ public class WebSocketClientServer : MonoBehaviour
         websocket.OnOpen += () =>
         {
             Debug.Log("Connection open!");
-            Send($"join:{playerId}");
+
+            string messageJson = JsonUtility.ToJson(new MessageData { command = "join", playerId = playerId });
+
+            Send(messageJson);
         };
 
         websocket.OnError += (e) =>
@@ -84,7 +87,8 @@ public class WebSocketClientServer : MonoBehaviour
     {
         if (websocket != null)
         {
-            Send($"leave:{playerId}");
+            string messageJson = JsonUtility.ToJson(new MessageData { command = "leave", playerId = playerId });
+            Send(messageJson);
             websocket.Close();
         }
     }
@@ -123,6 +127,7 @@ public class WebSocketClientServer : MonoBehaviour
     public class MessageData
     {
         public string command;
+        public string playerId;
         public string message;
     }
 }
