@@ -1,9 +1,12 @@
+const joinedPlayers = [];
+
 const handleMessage = (ws, message) => {
     const data = JSON.parse(message);
     switch (data.command) {
         case 'join':
             console.log('Player joined the game:', data.playerId);
             // Handle player joining
+            joinedPlayers.push({ id: data.playerId, name: "TestName" });
             break;
         case 'move':
             console.log('Player moved:', data.playerId, data.input);

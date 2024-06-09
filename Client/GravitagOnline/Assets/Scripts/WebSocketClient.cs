@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 public class WebSocketClientServer : MonoBehaviour
 {
     WebSocket websocket;
-    string serverUri = "ws://deketele.dev:6969";
+    string serverUri = "ws://gravitag.deketele.dev:6969";
     string playerId;
 
     void Start()
