@@ -7,7 +7,8 @@ using System.Text;
 public class WebSocketClientServer : MonoBehaviour
 {
     WebSocket websocket;
-    string serverUri = "ws://gravitag.deketele.dev:6969";
+    //changed ws to wss ?
+    string serverUri = "wss://gravitag.deketele.dev:6969";
     string playerId;
 
     void Start()
