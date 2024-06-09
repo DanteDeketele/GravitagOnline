@@ -1,23 +1,27 @@
 const express = require('express');
 const path = require('path');
 const http = require('http');
-const fs = require('fs');
 const WebSocket = require('ws');
 const gameLogic = require('./gameLogic');
 
 const app = express();
 
-// Serve static files from the "public" directory
+// Serve static files with proper Content-Encoding for Brotli
+app.use((req, res, next) => {
+    if (req.url.endsWith('.br')) {
+        res.set('Content-Encoding', 'br');
+    }
+    next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/players', (req, res) => {
-    // Return joined players and their IDs
     const players = gameLogic.getJoinedPlayers();
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify(players));
 });
 
-// Serve the index.html page for all other routes
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
