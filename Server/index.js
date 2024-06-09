@@ -1,34 +1,37 @@
 const express = require('express');
 const path = require('path');
-const http = require('http');
+const fs = require('fs');
+const https = require('https');
 const WebSocket = require('ws');
 const gameLogic = require('./gameLogic');
 
+// Load SSL certificates
+const privateKey = fs.readFileSync('/etc/letsencrypt/live/gravitag.deketele.dev/privkey.pem', 'utf8');
+const certificate = fs.readFileSync('/etc/letsencrypt/live/gravitag.deketele.dev/cert.pem', 'utf8');
+const ca = fs.readFileSync('/etc/letsencrypt/live/gravitag.deketele.dev/chain.pem', 'utf8');
+
+const credentials = { key: privateKey, cert: certificate, ca: ca };
+
 const app = express();
 
-// Serve static files with proper Content-Encoding for Brotli
-app.use((req, res, next) => {
-    if (req.url.endsWith('.br')) {
-        res.set('Content-Encoding', 'br');
-    }
-    next();
-});
-
+// Serve static files from the "public" directory
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/players', (req, res) => {
+    // Return joined players and their IDs
     const players = gameLogic.getJoinedPlayers();
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify(players));
 });
 
+// Serve the index.html page for all other routes
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-const server = http.createServer(app);
+const httpsServer = https.createServer(credentials, app);
 
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ server: httpsServer });
 
 wss.on('connection', (ws) => {
     console.log('Client connected');
@@ -44,6 +47,6 @@ wss.on('connection', (ws) => {
     });
 });
 
-server.listen(6969, () => {
-    console.log('Server running on port 6969');
+httpsServer.listen(6969, () => {
+    console.log('Server running on port 6969 with HTTPS');
 });
